@@ -1,0 +1,73 @@
+from docplex.mp.model import Model  # 导入库
+
+I = 3  # 需求点
+J = 3  # 服务站
+K = 2   # 层数
+
+H_day = [1, 1, 1]
+H_night = [2, 2, 2]
+C = [1, 3, 3]
+B = [
+     [1, 1, 1],
+     [1, 1, 1],
+     [1, 1, 1]
+    ]
+P = [0.5, 0.5, 0.5]
+
+model = Model()  # 类实例化
+model.I = [i for i in range(I)]  # I=[1,2...]
+model.J = [j for j in range(J)]  # J= [1,2..]
+model.K = [k for k in range(K)]  # K=[1,2]
+
+
+# 导入模型，面向模型编程，生成列表，调用时可省略range()函数
+Needs = model.I
+Supply = model.J
+Back_up = model.K
+
+
+X = model.binary_var_list(Supply, name='X')  # 需求点列表
+T = model.binary_var_list(Needs, name='T')  # 需求点i需求被满足
+Z = model.binary_var_cube(Needs, Supply, Back_up, name='Z')  # j服务点作为需求点i的k级供应
+
+# B = model.binary_var_matrix(Needs, Supply, name='B')  # j服务点可达需求点i
+# H_day = model.continuous_var_list(Needs, name='H_day')   # 白天
+# H_night = model.continuous_var_list(Needs, name='H_night')  # 夜晚
+# C = model.binary_var_list(Needs, name='C')
+# P = model.continuous_var_list(Needs, name='P')
+
+
+# Aim_function = model.integer_var(lb=0, name='Aim_function')  # 目标函数
+
+
+# 约束1
+for i in Needs:
+    for k in Back_up:
+        model.add_constraint(model.sum(Z[i, j, k] for j in Supply) <= 1, 'ct1_{}_{}'.format(i, k))
+
+# 约束2
+for i in Needs:
+    for j in Supply:
+        model.add_constraint(model.sum(Z[i, j, k] for k in Back_up) <= model.min(B[i][j], X[j]))
+
+# 约束3
+for j in Supply:
+    model.add_constraint(model.sum(B[i][j] * H_day[i] * Z[i, j, k] for i in Needs\
+                                   for k in Back_up) <= C[j] * P[j] * X[j])
+
+# 约束4
+for j in Supply:
+    model.add_constraint(model.sum(B[i][j] * H_night[i] * Z[i, j, k] for i in Needs for k in Back_up) <= C[j]*X[j])
+
+# 约束5
+for i in Needs:
+    model.add_constraint(model.sum(Z[i, j, k] for j in Supply for k in Back_up) >= T[i])
+
+# 约束6
+for i in Needs:
+    model.add_constraint(model.sum(Z[i, j, k] for j in Supply for k in Back_up) <= k * T[i])
+
+
+model.minimize(sum(1 -T[i] for i in Needs)) # 最小化目标函数值
+sol = model.solve()  # 模型求解
+print(sol)  # 打印输出求解结果
